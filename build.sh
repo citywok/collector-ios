@@ -14,12 +14,14 @@ EXPORT_PLIST=ExportOptions-AppStore.plist
 GENERATE=1
 DO_TEST=1
 DO_TESTFLIGHT=0
+DO_SMOKE=0
 
 for arg in "$@"; do
   case "$arg" in
     test) DO_TEST=1; DO_TESTFLIGHT=0;;
     testflight) DO_TEST=1; DO_TESTFLIGHT=1;;
     quick) DO_TEST=0;;
+    smoke) DO_SMOKE=1;;
   esac
 done
 
@@ -88,6 +90,16 @@ if [[ "$GENERATE" == 1 ]]; then
   export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
   which xcodegen >/dev/null || brew install xcodegen
   xcodegen generate
+fi
+
+if [[ "$DO_SMOKE" == 1 ]]; then
+  echo "==> LIVE smoke on simulator (real YouTube + GitHub)"
+  xcodebuild test \
+    -scheme "$SCHEME" \
+    -destination "platform=iOS Simulator,name=iPhone 17,OS=latest" \
+    -only-testing:CollectorTests/LiveSmokeTests \
+    -resultBundlePath "$BUILD_DIR/smoke-results.xcresult"
+  echo "    ✓ live smoke passed"
 fi
 
 if [[ "$DO_TEST" == 1 ]]; then
