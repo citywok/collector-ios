@@ -1,6 +1,0 @@
-bin/
-build/
-*.xcarchive
-DerivedData/
-*.ipa
-export/
