@@ -1,0 +1,37 @@
+name: Collector
+options:
+  bundleIdPrefix: me.citywok
+  deploymentTarget:
+    iOS: "16.0"
+  developmentLanguage: en
+targets:
+  Collector:
+    type: application
+    platform: iOS
+    sources:
+      - Collector
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.citywok.speechcollector
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_CRRCollectorRepo: ${CRR_COLLECTOR_REPO}
+        INFOPLIST_KEY_CRRCollectorToken: ${CRR_COLLECTOR_TOKEN}
+  CollectorTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - CollectorTests
+    dependencies:
+      - target: Collector
+schemes:
+  Collector:
+    build:
+      targets:
+        Collector: all
+        CollectorTests: [test]
+    test:
+      targets:
+        - CollectorTests

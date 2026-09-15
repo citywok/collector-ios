@@ -1,0 +1,7 @@
+# Manifest read by the mac-builder daemon at job time.
+app: collector
+build_path: .
+actions:
+  test:      bash build.sh test
+  testflight: bash build.sh testflight
+  ci:        bash build.sh test
