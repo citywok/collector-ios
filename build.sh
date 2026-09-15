@@ -31,6 +31,13 @@ ASC_ISSUER_ID="${ASC_ISSUER_ID:-69a6de98-0f77-47e3-e053-5b8c7c11a4d1}"
 ASC_AUTH_KEY_PATH="${ASC_AUTH_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8}"
 TEAM_ID="${TEAM_ID:-827WYA3YJJ}"
 
+# Manual-signing override (the headless TestFlight recipe): when
+# PROVISIONING_PROFILE_SPECIFIER_OVERRIDE is set, archive signs manually with
+# the golf-build keychain's Apple Distribution cert + the named on-disk
+# profile — no Apple-ID session, no ASC roundtrip needed at archive time.
+PROVISIONING_PROFILE_SPECIFIER="${PROVISIONING_PROFILE_SPECIFIER_OVERRIDE:-}"
+CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY_OVERRIDE:-}"
+
 # ── Headless codesign keychain unlock (ported from CityDoku build.sh) ──────
 # The Apple Development identity's PRIVATE KEY lives in the golf-build
 # keychain; if this env is empty, source the host's own file. The unlock
@@ -121,12 +128,24 @@ PYEOF
   echo "    build number: $BUILD_NUMBER"
 
   echo "==> Archiving"
+  local sign_args=()
+  if [[ -n "${PROVISIONING_PROFILE_SPECIFIER_OVERRIDE:-}" ]]; then
+    # Headless manual signing: golf-build keychain Distribution cert + named
+    # on-disk profile (the CityDoku OTA recipe — no Apple-ID session needed).
+    sign_args+=(CODE_SIGN_STYLE=Manual)
+    sign_args+=(CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY_OVERRIDE:-Apple Distribution: Andrew Parisio (827WYA3YJJ)}")
+    sign_args+=(PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_SPECIFIER_OVERRIDE")
+    sign_args+=(OTHER_CODE_SIGN_FLAGS="--keychain=${HOME}/Library/Keychains/golf-build.keychain-db")
+    sign_args+=(EXPANDED_CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES)
+  else
+    sign_args+=(CODE_SIGN_STYLE=Automatic)
+    sign_args+=(DEVELOPMENT_TEAM="$TEAM_ID")
+  fi
   xcodebuild archive \
     -scheme "$SCHEME" \
     -archivePath "$ARCHIVE_PATH" \
     -destination "generic/platform=iOS" \
-    CODE_SIGN_STYLE=Automatic \
-    DEVELOPMENT_TEAM="$TEAM_ID" \
+    "${sign_args[@]}" \
     MARKETING_VERSION=0.1.0 CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
     -allowProvisioningUpdates \
     -authenticationKeyPath "$ASC_AUTH_KEY_PATH" \
