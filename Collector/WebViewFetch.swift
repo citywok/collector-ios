@@ -10,7 +10,6 @@ final class WebViewFetch: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     static let shared = WebViewFetch()
     private var webView: WKWebView?
     private var jobs: [String: (Result<[String], Error>) -> Void] = [:]
-    private var pendingWatchdogs: [String: DispatchWorkItem] = [:]
 
     struct FetchError: Error, LocalizedError {
         let message: String
@@ -26,18 +25,20 @@ final class WebViewFetch: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         // a hang→watchdog-kill when the page JS never messaged home (no
         // ytInitialPlayerResponse on the mobile page in time). Fail LOUD into
         // the debug log rather than hang the batch.
-        let timeout = DispatchWorkItem { [weak self] in
+        // WATCHDOG — runs on a GLOBAL queue: independent of the main thread
+        // (the sim repro proved main can be blocked indefinitely by WebKit
+        // construction inside sandboxed contexts; a main-queue asyncAfter
+        // then never fires — which was both the sim failure AND the device
+        // hang→watchdog-kill). Whatever happens in fetch, completion lands.
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 40) { [weak self] in
+            guard let self, let job = self.jobs.removeValue(forKey: videoId) else { return }
             DebugLog.shared.record(videoId: videoId, transport: "wkwebview",
                                    httpStatus: 0, playability: "TIMEOUT",
                                    reason: "no player response within 40s",
-                                   errorText: "watchdog fired")
-            self?.jobs[videoId]?(.failure(FetchError(
-                message: "watchdog: no player response in 40s")))
-            self?.jobs.removeValue(forKey: videoId)
-            self?.webView?.stopLoading()
+                                   errorText: "watchdog fired (bg-queue)")
+            job(.failure(FetchError(message: "watchdog: no player response in 40s")))
+            DispatchQueue.main.async { self.webView?.stopLoading() }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 40, execute: timeout)
-        pendingWatchdogs[videoId] = timeout
         let cfg = WKWebViewConfiguration()
         let uc = cfg.userContentController
         uc.add(self, name: "collector")
@@ -111,7 +112,6 @@ final class WebViewFetch: NSObject, WKScriptMessageHandler, WKNavigationDelegate
               let body = message.body as? [String: Any],
               let videoId = body["videoId"] as? String else { return }
         let lines = (body["lines"] as? [String]) ?? []
-        if let wd = pendingWatchdogs.removeValue(forKey: videoId) { wd.cancel() }
         if !lines.isEmpty {
             DebugLog.shared.record(videoId: videoId, transport: "wkwebview",
                                    httpStatus: 200, playability: "OK",
