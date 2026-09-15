@@ -97,6 +97,9 @@ if [[ "$DO_SMOKE" == 1 ]]; then
   # transport token: Mac-local file, 600 perms, never committed
   export CRR_COLLECTOR_TOKEN="${CRR_COLLECTOR_TOKEN:-$(cat ${HOME}/.collector-smoke-token 2>/dev/null)}"
   export CRR_LIVE_SMOKE=1
+  # XCTest env passthrough: TEST_RUNNER_<VAR> reaches the sim runner process.
+  export TEST_RUNNER_CRR_LIVE_SMOKE=1
+  export TEST_RUNNER_CRR_COLLECTOR_TOKEN="$CRR_COLLECTOR_TOKEN"
   xcodebuild test \
     -scheme "$SCHEME" \
     -destination "platform=iOS Simulator,name=iPhone 17,OS=latest" \
