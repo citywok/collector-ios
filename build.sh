@@ -130,7 +130,7 @@ PYEOF
   echo "    build number: $BUILD_NUMBER"
 
   echo "==> Archiving"
-  local sign_args=()
+  sign_args=()
   if [[ -n "${PROVISIONING_PROFILE_SPECIFIER_OVERRIDE:-}" ]]; then
     # Headless manual signing: golf-build keychain Distribution cert + named
     # on-disk profile (the CityDoku OTA recipe — no Apple-ID session needed).
