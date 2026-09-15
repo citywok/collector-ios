@@ -113,13 +113,12 @@ def create_profile(bundle):
 
 
 def download_profile(profile):
-    req = __import__("urllib.request", fromlist=["urlopen"]).Request(
-        f"{API}/v1/profiles/{profile['id']}",
-        headers={"Authorization": f"Bearer {token()}", "Content-Type": "application/json"})
     import urllib.request
+    req = urllib.request.Request(
+        f"{API}/v1/profiles/{profile['id']}/profileContent",
+        headers={"Authorization": f"Bearer {token()}"})
     with urllib.request.urlopen(req, timeout=60) as r:
-        data = json.load(r)
-    return base64.b64decode(data["data"]["attributes"]["profileContent"])
+        return r.read()
 
 
 def profile_facts(raw):
