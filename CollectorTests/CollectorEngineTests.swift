@@ -3,13 +3,12 @@ import XCTest
 
 final class CollectorEngineTests: XCTestCase {
     // Fixture: player response shape (real structure, trimmed).
-    let playerFixture = """
-    {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[
-      {"baseUrl":"https://www.youtube.com/api/timedtext?lang=en&v=XYZ","languageCode":"en"},
-      {"baseUrl":"https://www.youtube.com/api/timedtext?lang=en&v=XYZ&kind=asr","languageCode":"en","kind":"asr"},
-      {"baseUrl":"https://www.youtube.com/api/timedtext?lang=es&v=XYZ","languageCode":"es"}
-    ]}}}
-    """.data(using: .utf8)!
+    let playerFixture = ("{" +
+        "\"captions\":{\"playerCaptionsTracklistRenderer\":{\"captionTracks\":[" +
+            "{\"baseUrl\":\"https://www.youtube.com/api/timedtext?lang=en&v=XYZ\",\"languageCode\":\"en\"}," +
+            "{\"baseUrl\":\"https://www.youtube.com/api/timedtext?lang=en&v=XYZ&kind=asr\",\"languageCode\":\"en\",\"kind\":\"asr\"}," +
+            "{\"baseUrl\":\"https://www.youtube.com/api/timedtext?lang=es&v=XYZ\",\"languageCode\":\"es\"}" +
+        "]}}}").data(using: .utf8)!
 
     func testCaptionTracksParse() throws {
         let tracks = try PlayerParser.captionTracks(from: playerFixture)
@@ -31,13 +30,12 @@ final class CollectorEngineTests: XCTestCase {
     }
 
     func testJson3ToText() {
-        let json3 = Data(#"
-        {"events":[
-          {"segs":[{"utf8":"THE U.S. OPEN WRAPPED "},{"utf8":"UP AT ARTHUR ASHE"}]},
-          {"segs":[{"utf8":"\n"}]},
-          {"segs":[{"utf8":"STADIUM IN QUEENS."}]}
-        ]}
-        ""#.utf8)
+        let json3 = Data(("{" +
+            "\"events\":[" +
+                "{\"segs\":[{\"utf8\":\"THE U.S. OPEN WRAPPED \"},{\"utf8\":\"UP AT ARTHUR ASHE\"}]}," +
+                "{\"segs\":[{\"utf8\":\"\\n\"}]}," +
+                "{\"segs\":[{\"utf8\":\"STADIUM IN QUEENS.\"}]}" +
+            "]}").utf8)
         let lines = CaptionText.fromJson3(json3)
         XCTAssertEqual(lines, ["THE U.S. OPEN WRAPPED UP AT ARTHUR ASHE", "STADIUM IN QUEENS."])
     }

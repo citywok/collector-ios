@@ -25,6 +25,9 @@ targets:
     platform: iOS
     sources:
       - CollectorTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: Collector
 schemes:

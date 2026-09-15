@@ -28,7 +28,7 @@ struct CollectorView: View {
                 }
             }
             .navigationTitle("Speech Collector")
-            .onChange(of: auto) { _, on in
+            .onChange(of: auto) { on in
                 timer?.invalidate()
                 if on {
                     timer = Timer.scheduledTimer(withTimeInterval: 10 * 60, repeats: true) { _ in
