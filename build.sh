@@ -84,6 +84,8 @@ unlock_codesign_keychain() {
 }
 
 if [[ "$GENERATE" == 1 ]]; then
+  # brew lives in /opt/homebrew/bin on this Mac (daemon/SSH PATH misses it).
+  export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
   which xcodegen >/dev/null || brew install xcodegen
   xcodegen generate
 fi
