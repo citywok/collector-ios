@@ -11,10 +11,16 @@ import Foundation
 
 enum GH {
     static var token: String {
+        if let s = UserDefaults.standard.string(forKey: "crr_pat"), !s.isEmpty {
+            return s  // device-pasted token (onboarding screen) — preferred
+        }
         let s = Bundle.main.object(forInfoDictionaryKey: "CRRCollectorToken") as? String ?? ""
         return s.isEmpty ? (ProcessInfo.processInfo.environment["CRR_COLLECTOR_TOKEN"] ?? "") : s
     }
     static var repo: String {
+        if let s = UserDefaults.standard.string(forKey: "crr_repo"), !s.isEmpty {
+            return s
+        }
         let s = Bundle.main.object(forInfoDictionaryKey: "CRRCollectorRepo") as? String ?? ""
         return s.isEmpty ? (ProcessInfo.processInfo.environment["CRR_COLLECTOR_REPO"] ?? "") : s
     }
