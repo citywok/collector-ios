@@ -42,33 +42,56 @@ def token():
 
 
 def call(method, path, payload=None):
+    import urllib.request, urllib.error
     req = __import__("urllib.request", fromlist=["urlopen"]).Request(
         API + path, method=method,
         headers={"Authorization": f"Bearer {token()}", "Content-Type": "application/json"},
         data=json.dumps(payload).encode() if payload else None)
-    import urllib.request
-    with urllib.request.urlopen(req, timeout=40) as r:
-        return json.load(r) if r.status != 204 else {}
+    try:
+        with urllib.request.urlopen(req, timeout=40) as r:
+            return json.load(r) if r.status != 204 else {}
+    except urllib.error.HTTPError as e:
+        if e.code in (409, 422):
+            raise Conflict(e.code, e.read().decode()[:300])
+        raise
+
+
+class Conflict(Exception):
+    pass
 
 
 def get_or_register_bundle():
     got = call("GET", f"/v1/bundleIds?filter[identifier]={BUNDLE}").get("data") or []
     if got:
         return got[0]
-    return call("POST", "/v1/bundleIds", {
-        "data": {"type": "bundleIds",
-                 "attributes": {"identifier": BUNDLE, "name": APP_NAME}}})["data"]
+    try:
+        return call("POST", "/v1/bundleIds", {
+            "data": {"type": "bundleIds",
+                     "attributes": {"identifier": BUNDLE, "name": APP_NAME,
+                                    "platform": "IOS"}}})["data"]
+    except Conflict:
+        # already registered upstream (race/ASC auto-registration) — re-fetch
+        got = call("GET", f"/v1/bundleIds?filter[identifier]={BUNDLE}").get("data") or []
+        if not got:
+            raise
+        return got[0]
 
 
 def get_or_create_app():
     got = call("GET", f"/v1/apps?filter[bundleId]={BUNDLE}").get("data") or []
     if got:
         return got[0]
-    return call("POST", "/v1/apps", {
-        "data": {"type": "apps",
-                 "attributes": {"bundleId": BUNDLE, "name": APP_NAME,
-                                "sku": "speechcollector",
-                                "primaryLocale": "en-US"}}})["data"]
+    try:
+        return call("POST", "/v1/apps", {
+            "data": {"type": "apps",
+                     "attributes": {"bundleId": BUNDLE, "name": APP_NAME,
+                                    "sku": "speechcollector",
+                                    "primaryLocale": "en-US"}}})["data"]
+    except Conflict:
+        got = call("GET", f"/v1/apps?filter[bundleId]={BUNDLE}").get("data") or []
+        if not got:
+            raise
+        return got[0]
 
 
 
