@@ -29,7 +29,7 @@ done
 ASC_KEY_ID="${ASC_KEY_ID:-MA894X726H}"
 ASC_ISSUER_ID="${ASC_ISSUER_ID:-69a6de98-0f77-47e3-e053-5b8c7c11a4d1}"
 ASC_AUTH_KEY_PATH="${ASC_AUTH_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8}"
-TEAM_ID="${TEAM_ID:-9XBN64MC88}"
+TEAM_ID="${TEAM_ID:-827WYA3YJJ}"
 
 if [[ "$GENERATE" == 1 ]]; then
   which xcodegen >/dev/null || brew install xcodegen
@@ -79,6 +79,8 @@ PYEOF
     -scheme "$SCHEME" \
     -archivePath "$ARCHIVE_PATH" \
     -destination "generic/platform=iOS" \
+    CODE_SIGN_STYLE=Automatic \
+    DEVELOPMENT_TEAM="$TEAM_ID" \
     MARKETING_VERSION=0.1.0 CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
     -allowProvisioningUpdates \
     -authenticationKeyPath "$ASC_AUTH_KEY_PATH" \
