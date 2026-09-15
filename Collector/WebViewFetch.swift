@@ -17,6 +17,10 @@ final class WebViewFetch: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     }
 
     func fetch(videoId: String, completion: @escaping (Result<[String], Error>) -> Void) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { self.fetch(videoId: videoId, completion: completion) }
+            return
+        }
         let cfg = WKWebViewConfiguration()
         let uc = cfg.userContentController
         uc.add(self, name: "collector")

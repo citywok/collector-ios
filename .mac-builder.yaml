@@ -2,8 +2,25 @@ app: collector
 build_path: .
 actions:
   test: bash build.sh test
-  testflight: env HOME=/Users/andrew PROVISIONING_PROFILE_SPECIFIER_OVERRIDE='Collector
-    AdHoc 20260915-090945' EXPORT_METHOD_OVERRIDE=release-testing bash build.sh testflight
+  testflight: 'bash -c ''
+
+    set -e
+
+    PW=$(grep GOLF_BUILD_KEYCHAIN_PW ~/.golf-publish.env | cut -d= -f2)
+
+    security unlock-keychain -p "$PW" "$HOME/Library/Keychains/golf-build.keychain-db"
+
+    security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$PW" "$HOME/Library/Keychains/golf-build.keychain-db"
+    >/dev/null
+
+    security default-keychain -d user -s "$HOME/Library/Keychains/golf-build.keychain-db"
+
+    trap ''security default-keychain -d user -s "$HOME/Library/Keychains/login.keychain-db"''
+    EXIT
+
+    PROVISIONING_PROFILE_SPECIFIER_OVERRIDE="Collector AdHoc 20260915-090945" EXPORT_METHOD_OVERRIDE=release-testing
+    HOME=/Users/andrew bash build.sh testflight
+
+    '' '
   ci: bash build.sh test
   smoke: env CRR_LIVE_SMOKE=1 bash build.sh smoke
-  smoketestflight: bash build.sh smoke
