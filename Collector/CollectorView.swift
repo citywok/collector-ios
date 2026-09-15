@@ -4,6 +4,8 @@ struct CollectorView: View {
     @StateObject private var engine: CollectorEngine
     @State private var auto = false
     @State private var timer: Timer?
+    @State private var pat: String = ""
+    @State private var repo: String = "citywok/collector-data"
 
     init() { _engine = StateObject(wrappedValue: CollectorEngine()) }
 
@@ -20,6 +22,21 @@ struct CollectorView: View {
                     }
                     Toggle("Auto (while app open)", isOn: $auto)
                     if auto { LabeledContent("Pacing", value: "8–15 min randomized") }
+                }
+                Section("GitHub transport (one-time setup)") {
+                    SecureField("Fine-grained PAT (contents R/W on collector-data)", text: $pat)
+                    Button("Save token") {
+                        UserDefaults.standard.set(pat, forKey: "crr_pat")
+                        engine.lastStatus = "token saved (\(pat.count) chars)"
+                        pat = ""
+                    }
+                    .disabled(pat.count < 20)
+                    TextField("Repo (owner/name)", text: $repo)
+                    Button("Save repo") {
+                        UserDefaults.standard.set(repo, forKey: "crr_repo")
+                        engine.lastStatus = "repo saved: \(repo)"
+                    }
+                    .disabled(!repo.contains("/"))
                 }
                 Section("Status") {
                     Text(engine.lastStatus).font(.footnote).foregroundStyle(.secondary)
