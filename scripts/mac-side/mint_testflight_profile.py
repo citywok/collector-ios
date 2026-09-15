@@ -67,7 +67,8 @@ def get_or_register_bundle():
     try:
         return call("POST", "/v1/bundleIds", {
             "data": {"type": "bundleIds",
-                     "attributes": {"identifier": BUNDLE, "name": APP_NAME}}})["data"]
+                     "attributes": {"identifier": BUNDLE, "name": APP_NAME,
+                                    "platform": "IOS"}}})["data"]
     except Conflict:
         # already registered upstream (race/ASC auto-registration) — re-fetch
         got = call("GET", f"/v1/bundleIds?filter[identifier]={BUNDLE}").get("data") or []
