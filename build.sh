@@ -180,14 +180,14 @@ PYEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>method</key><string>app-store-connect</string>
+  <key>method</key><string>${EXPORT_METHOD:-app-store-connect}</string>
   <key>teamID</key><string>${TEAM_ID}</string>
   <key>signingStyle</key><string>manual</string>
   <key>provisioningProfiles</key><dict>
     <key>${BUNDLE_ID}</key><string>${PROVISIONING_PROFILE_SPECIFIER_OVERRIDE}</string>
   </dict>
   <key>signingCertificate</key><string>${CODE_SIGN_IDENTITY_OVERRIDE:-Apple Distribution: Andrew Parisio (${TEAM_ID})}</string>
-  <key>uploadSymbols</key><true/>
+  <key>uploadSymbols</key><false/>
 </dict></plist>
 PLIST
   else
