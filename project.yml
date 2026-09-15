@@ -12,6 +12,7 @@ targets:
       - Collector
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: me.citywok.speechcollector
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
@@ -24,6 +25,9 @@ targets:
     platform: iOS
     sources:
       - CollectorTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: Collector
 schemes:
