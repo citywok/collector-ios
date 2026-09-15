@@ -153,7 +153,7 @@ PYEOF
     # Headless manual signing: golf-build keychain Distribution cert + named
     # on-disk profile (the CityDoku OTA recipe — no Apple-ID session needed).
     sign_args+=(CODE_SIGN_STYLE=Manual)
-    sign_args+=(CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY_OVERRIDE:-Apple Distribution: Andrew Parisio (827WYA3YJJ)}")
+    sign_args+=(CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY_SHA1_OVERRIDE:-D8B689C480523741E998064EF8A0856DE65DD115}")
     sign_args+=(PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_SPECIFIER_OVERRIDE")
     sign_args+=(OTHER_CODE_SIGN_FLAGS="--keychain=${HOME}/Library/Keychains/golf-build.keychain-db")
     sign_args+=(EXPANDED_CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES)
