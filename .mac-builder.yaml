@@ -1,8 +1,9 @@
 app: collector
 build_path: .
 actions:
-  test:      bash build.sh test
-  testflight: bash build.sh testflight
-  ci:        bash build.sh test
-  smoke:     env CRR_LIVE_SMOKE=1 bash build.sh smoke
+  test: bash build.sh test
+  testflight: env HOME=/Users/andrew PROVISIONING_PROFILE_SPECIFIER_OVERRIDE='Collector
+    AdHoc 20260915-090945' EXPORT_METHOD_OVERRIDE=release-testing bash build.sh testflight
+  ci: bash build.sh test
+  smoke: env CRR_LIVE_SMOKE=1 bash build.sh smoke
   smoketestflight: bash build.sh smoke
