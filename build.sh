@@ -1,6 +1,7 @@
 #!/bin/bash
 # AgentX-style lean build script for the Collector iOS app.
 # Runs ON THE MAC (mac-builder daemon or local). Dependencies: xcodegen, xcbeautify (optional).
+SIM_LOCK_PROTOCOL=2   # per-device-lock era; intake refuses builds without it
 set -euo pipefail
 cd "$(dirname "$0")"
 APP_NAME=Collector
