@@ -180,7 +180,7 @@ PYEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>method</key><string>${EXPORT_METHOD:-app-store-connect}</string>
+  <key>method</key><string>${EXPORT_METHOD_OVERRIDE:-app-store-connect}</string>
   <key>teamID</key><string>${TEAM_ID}</string>
   <key>signingStyle</key><string>manual</string>
   <key>provisioningProfiles</key><dict>
