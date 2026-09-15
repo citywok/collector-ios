@@ -31,6 +31,51 @@ ASC_ISSUER_ID="${ASC_ISSUER_ID:-69a6de98-0f77-47e3-e053-5b8c7c11a4d1}"
 ASC_AUTH_KEY_PATH="${ASC_AUTH_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8}"
 TEAM_ID="${TEAM_ID:-827WYA3YJJ}"
 
+# ── Headless codesign keychain unlock (ported from CityDoku build.sh) ──────
+# The Apple Development identity's PRIVATE KEY lives in the golf-build
+# keychain; if this env is empty, source the host's own file. The unlock
+# must use ABSOLUTE keychain paths (security resolves bare names against
+# cwd — the daemon/SSH cwd is /) and codesign in a non-GUI session
+# resolves through the DEFAULT keychain, not just the search list.
+CODESIGN_KEYCHAIN="${CODESIGN_KEYCHAIN:-golf-build.keychain}"
+KEYCHAIN_RESTORE_NEEDED=0
+KEYCHAIN_RESOLVED=""
+if [[ -z "${CODESIGN_KEYCHAIN_PASSWORD:-}" && -f "${HOME}/.golf-publish.env" ]]; then
+    # shellcheck disable=SC1090
+    . "${HOME}/.golf-publish.env" 2>/dev/null || true
+    CODESIGN_KEYCHAIN_PASSWORD="${CODESIGN_KEYCHAIN_PASSWORD:-${GOLF_BUILD_KEYCHAIN_PW:-}}"
+fi
+restore_keychain_search_list() {
+    if [[ "$KEYCHAIN_RESTORE_NEEDED" == "1" ]] && command -v security >/dev/null 2>&1; then
+        security list-keychains -d user -s "${HOME}/Library/Keychains/login.keychain-db" "$KEYCHAIN_RESOLVED" >/dev/null 2>&1 || true
+        security default-keychain -d user -s "${HOME}/Library/Keychains/login.keychain-db" >/dev/null 2>&1 || true
+    fi
+}
+trap restore_keychain_search_list EXIT
+unlock_codesign_keychain() {
+    command -v security >/dev/null 2>&1 || return 0
+    if [[ -z "${CODESIGN_KEYCHAIN_PASSWORD:-}" ]]; then
+        echo "    CODESIGN_KEYCHAIN_PASSWORD not set; assuming $CODESIGN_KEYCHAIN already unlocked"
+        return 0
+    fi
+    local chain="$CODESIGN_KEYCHAIN"
+    local chain_dir="${HOME}/Library/Keychains"
+    if [[ -f "${chain_dir}/${chain}" ]]; then
+        chain="${chain_dir}/${chain}"
+    elif [[ -f "${chain_dir}/${chain}-db" ]]; then
+        chain="${chain_dir}/${chain}-db"
+    fi
+    echo "==> Unlocking codesign keychain ($chain)"
+    security list-keychains -d user -s "${HOME}/Library/Keychains/login.keychain-db" "$chain" >/dev/null
+    security default-keychain -d user -s "$chain" >/dev/null 2>&1 || true
+    KEYCHAIN_RESTORE_NEEDED=1
+    KEYCHAIN_RESOLVED="$chain"
+    security unlock-keychain -p "$CODESIGN_KEYCHAIN_PASSWORD" "$chain"
+    security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+        -k "$CODESIGN_KEYCHAIN_PASSWORD" "$chain" >/dev/null
+    echo "    ✓ Codesign keychain ready"
+}
+
 if [[ "$GENERATE" == 1 ]]; then
   which xcodegen >/dev/null || brew install xcodegen
   xcodegen generate
@@ -49,6 +94,7 @@ if [[ "$DO_TEST" == 1 ]]; then
 fi
 
 if [[ "$DO_TESTFLIGHT" == 1 ]]; then
+  unlock_codesign_keychain
   if [[ -z "$ASC_KEY_ID" || -z "$ASC_ISSUER_ID" || ! -f "$ASC_AUTH_KEY_PATH" ]]; then
     echo "ERROR: ASC key env not set (ASC_KEY_ID / ASC_ISSUER_ID / ASC_AUTH_KEY_PATH)" >&2
     exit 2
