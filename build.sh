@@ -55,7 +55,7 @@ if [[ "$DO_TESTFLIGHT" == 1 ]]; then
   fi
 
   # Build-number: ASC max + 1, floored at git commit count (proven pattern).
-  BUILD_NUMBER=$(python3 - "$ASC_KEY_ID" "$ASC_ISSUER_ID" "$ASC_AUTH_KEY_PATH" "$BUNDLE_ID" <<PYEOF
+  BUILD_NUMBER=$(/usr/bin/python3 - "$ASC_KEY_ID" "$ASC_ISSUER_ID" "$ASC_AUTH_KEY_PATH" "$BUNDLE_ID" <<PYEOF
 import sys, json, urllib.request, urllib.parse, jwt, time
 kid, iss, keyp, bundle_id = sys.argv[1:5]
 key = open(keyp).read(); now = int(time.time())
