@@ -58,6 +58,6 @@ final class LiveSmokeTests: XCTestCase {
     }
 
     private func day() -> String {
-        ISO8601DateFormatter().string(from: Date()).prefix(10)  // results/YYYY-MM-DD.json
+        String(ISO8601DateFormatter().string(from: Date()).prefix(10))  // results/YYYY-MM-DD.json
     }
 }

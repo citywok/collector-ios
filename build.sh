@@ -94,6 +94,9 @@ fi
 
 if [[ "$DO_SMOKE" == 1 ]]; then
   echo "==> LIVE smoke on simulator (real YouTube + GitHub)"
+  # transport token: Mac-local file, 600 perms, never committed
+  export CRR_COLLECTOR_TOKEN="${CRR_COLLECTOR_TOKEN:-$(cat ${HOME}/.collector-smoke-token 2>/dev/null)}"
+  export CRR_LIVE_SMOKE=1
   xcodebuild test \
     -scheme "$SCHEME" \
     -destination "platform=iOS Simulator,name=iPhone 17,OS=latest" \
