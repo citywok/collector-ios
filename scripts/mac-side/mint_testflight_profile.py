@@ -113,13 +113,26 @@ def create_profile(bundle):
 
 
 def download_profile(profile):
+    # Two shapes in the wild: (a) GET /profiles/{id} returning base64 in
+    # attributes.profileContent; (b) GET /profiles/{id}/profileContent
+    # returning the raw DER bytes. Try (a) then (b).
+    import urllib.request, urllib.error
     req = __import__("urllib.request", fromlist=["urlopen"]).Request(
         f"{API}/v1/profiles/{profile['id']}",
         headers={"Authorization": f"Bearer {token()}", "Content-Type": "application/json"})
-    import urllib.request
-    with urllib.request.urlopen(req, timeout=60) as r:
-        data = json.load(r)
-    return base64.b64decode(data["data"]["attributes"]["profileContent"])
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            data = json.load(r)
+        content = (data.get("data", {}).get("attributes") or {}).get("profileContent")
+        if content:
+            return base64.b64decode(content)
+    except urllib.error.HTTPError:
+        pass
+    req2 = urllib.request.Request(
+        f"{API}/v1/profiles/{profile['id']}/profileContent",
+        headers={"Authorization": f"Bearer {token()}"})
+    with urllib.request.urlopen(req2, timeout=60) as r:
+        return r.read()
 
 
 def profile_facts(raw):
