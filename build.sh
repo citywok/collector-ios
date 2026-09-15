@@ -35,13 +35,13 @@ fi
 
 if [[ "$DO_TEST" == 1 ]]; then
   echo "==> Unit tests on simulator"
+  # Destination must be an existing device type on the build host; the host
+  # has no iPhone 16 — its fleet is iPhone 17-era (proven in the intake log).
+  DEST="platform=iOS Simulator,name=iPhone 17,OS=latest"
   xcodebuild test \
     -scheme "$SCHEME" \
-    -destination "platform=iOS Simulator,name=iPhone 16,OS=latest" \
-    -resultBundlePath "$BUILD_DIR/test-results.xcresult" \
-    | xcbeautify --renderer terminal 2>/dev/null || xcodebuild test \
-    -scheme "$SCHEME" \
-    -destination "platform=iOS Simulator,name=iPhone 16,OS=latest"
+    -destination "$DEST" \
+    -resultBundlePath "$BUILD_DIR/test-results.xcresult"
   echo "    ✓ tests passed"
 fi
 
