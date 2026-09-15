@@ -8,7 +8,7 @@ final class CollectorEngineTests: XCTestCase {
             "{\"baseUrl\":\"https://www.youtube.com/api/timedtext?lang=en&v=XYZ\",\"languageCode\":\"en\"}," +
             "{\"baseUrl\":\"https://www.youtube.com/api/timedtext?lang=en&v=XYZ&kind=asr\",\"languageCode\":\"en\",\"kind\":\"asr\"}," +
             "{\"baseUrl\":\"https://www.youtube.com/api/timedtext?lang=es&v=XYZ\",\"languageCode\":\"es\"}" +
-        "]}}").data(using: .utf8)!
+        "]}}}").data(using: .utf8)!
 
     func testCaptionTracksParse() throws {
         let tracks = try PlayerParser.captionTracks(from: playerFixture)
