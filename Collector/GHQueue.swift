@@ -46,6 +46,40 @@ enum GH {
         return req
     }
 
+    /// Push the device's diagnostic log home (results/debug-<ts>.json) —
+    /// no PAT needed beyond the repo contents grant; this is the
+    /// "app tells me what it saw" channel. Auto-fires after every batch.
+    static func postDebugLog(session: URLSession) async throws {
+        let log = DebugLog.shared
+        let payload: [[String: Any]] = log.attempts.map { a in
+            ["ts": a.ts, "videoId": a.videoId, "transport": a.transport,
+             "http": a.httpStatus, "playability": a.playability, "reason": a.reason,
+             "tracks": a.trackCount, "params": a.firstTrackParams,
+             "preview": a.bytesPreview, "err": a.errorText]
+        }
+        let day = String(ISO8601DateFormatter().string(from: Date()).prefix(10))
+        let path = "results/debug-\(day).json"
+        var prior: [[String: Any]] = []
+        var sha: String?
+        let get = request(path: "/repos/\(repo)/contents/\(path)", method: "GET")
+        let (gdata, gresp) = try await session.data(for: get)
+        if (gresp as? HTTPURLResponse)?.statusCode == 200,
+           let obj = try? JSONSerialization.jsonObject(with: gdata) as? [String: Any],
+           let content = obj["content"] as? String,
+           let decoded = Data(base64Encoded: content.replacingOccurrences(of: "\n", with: "")),
+           let priorObj = try? JSONSerialization.jsonObject(with: decoded) as? [[String: Any]] {
+            prior = priorObj
+            sha = obj["sha"] as? String
+        }
+        var all = prior
+        all.append(contentsOf: payload)
+        let put = request(path: "/repos/\(repo)/contents/\(path)", method: "PUT",
+                          json: ["message": "debug log \(day) (\(payload.count) attempts)",
+                                 "content": Data(try JSONSerialization.data(withJSONObject: all)).base64EncodedString(),
+                                 "sha": sha ?? ""])
+        _ = try await session.data(for: put)
+    }
+
     /// GET the pending queue (single file on main).
     static func fetchPending(session: URLSession) async throws -> [PendingItem] {
         let req = request(path: "/repos/\(repo)/contents/queue/pending.json", method: "GET")

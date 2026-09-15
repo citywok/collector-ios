@@ -39,6 +39,10 @@ struct CollectorView: View {
                     .disabled(!repo.contains("/"))
                 }
                 Section("Status") {
+                    Button("Send debug bundle now") {
+                        Task { try? await GH.postDebugLog(session: URLSession(configuration: .default)) ; engine.lastStatus = "debug bundle sent: \(DebugLog.shared.attempts.count) attempts" }
+                    }
+                    LabeledContent("Attempts logged", value: "\(DebugLog.shared.attempts.count)")
                     Text(engine.lastStatus).font(.footnote).foregroundStyle(.secondary)
                     Text("Requests leave from this device's current network — no server proxies, no credentials on device beyond short-lived S3 PUT slots.")
                         .font(.caption2).foregroundStyle(.tertiary)

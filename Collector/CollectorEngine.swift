@@ -62,11 +62,35 @@ final class CollectorEngine: ObservableObject {
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (pdata, presp) = try await session.data(for: req)
-        guard let code = (presp as? HTTPURLResponse)?.statusCode, code == 200 else {
-            throw CaptionError.playerRequestFailed((presp as? HTTPURLResponse)?.statusCode ?? -1)
+        let httpStatus = (presp as? HTTPURLResponse)?.statusCode ?? -1
+        var playability = "", reason = "", trackCount = 0, firstParams = ""
+        var tracks: [CaptionTrack] = []
+        do {
+            tracks = try PlayerParser.captionTracks(from: pdata)
+            trackCount = tracks.count
+            if let obj = try? JSONSerialization.jsonObject(with: pdata) as? [String: Any] {
+                let ps = obj["playabilityStatus"] as? [String: Any] ?? [:]
+                playability = (ps["status"] as? String) ?? ""
+                reason = (ps["reason"] as? String) ?? ""
+            }
+            if let t0 = tracks.first,
+               let comps = URLComponents(string: t0.baseUrl),
+               let q = comps.query {
+                firstParams = String(q.prefix(140))
+            }
+        } catch {
+            DebugLog.shared.record(videoId: videoId, transport: "innertube-v1",
+                                   httpStatus: httpStatus, errorText: "parse: \(error)")
+            throw error
         }
-        let tracks = try PlayerParser.captionTracks(from: pdata)
-        // Prefer manual English, then any English, then ASR, then first.
+        DebugLog.shared.record(videoId: videoId, transport: "innertube-v1",
+                               httpStatus: httpStatus, playability: playability,
+                               reason: reason, trackCount: trackCount,
+                               firstTrackParams: firstParams,
+                               bytesPreview: String(data: pdata.prefix(200), encoding: .utf8) ?? "")
+        guard httpStatus == 200 else {
+            throw CaptionError.playerRequestFailed(httpStatus)
+        }
         let manual = tracks.first { $0.kind == nil && ($0.languageCode?.hasPrefix("en") ?? false) }
         let enAny = tracks.first { $0.languageCode?.hasPrefix("en") ?? false }
         let asr = tracks.first { $0.kind == "asr" }
@@ -76,8 +100,12 @@ final class CollectorEngine: ObservableObject {
         var treq = URLRequest(url: URL(string: track.baseUrl + "&fmt=json3")!)
         treq.setValue(Config.userAgent, forHTTPHeaderField: "User-Agent")
         let (tdata, tresp) = try await session.data(for: treq)
-        guard (tresp as? HTTPURLResponse)?.statusCode == 200 else {
-            throw CaptionError.trackDownloadFailed((tresp as? HTTPURLResponse)?.statusCode ?? -1)
+        let tstatus = (tresp as? HTTPURLResponse)?.statusCode ?? -1
+        DebugLog.shared.record(videoId: videoId, transport: "timedtext",
+                               httpStatus: tstatus,
+                               bytesPreview: String(data: tdata.prefix(200), encoding: .utf8) ?? "")
+        guard tstatus == 200 else {
+            throw CaptionError.trackDownloadFailed(tstatus)
         }
         return CaptionText.fromJson3(tdata)
     }
@@ -112,7 +140,7 @@ final class CollectorEngine: ObservableObject {
         _ = try? await session.data(for: req)
     }
 
-    // MARK: - One full batch (GitHub transport)
+    // MARK: - One full batch (GitHub transport; WKWebView resolver)
 
     func runBatch() async {
         do {
@@ -123,8 +151,15 @@ final class CollectorEngine: ObservableObject {
             }
             var results: [[String: Any]] = []
             for item in queue.prefix(5) {
+                let lines: [String]
                 do {
-                    let lines = try await fetchCaptions(videoId: item.videoId)
+                    // Browser-context fetch (real player runtime: PO tokens mint
+                    // for real; the raw-innertube path died to YouTube's wall).
+                    lines = try await withCheckedThrowingContinuation { cont in
+                        WebViewFetch.shared.fetch(videoId: item.videoId) { result in
+                            cont.resume(with: result)
+                        }
+                    }
                     results.append(["video_id": item.videoId,
                                     "title": item.title ?? "",
                                     "status": "ok",
@@ -142,6 +177,7 @@ final class CollectorEngine: ObservableObject {
             }
             try await GH.postResults(results: results, session: session)
             try await GH.removeConsumed(ids: results.map { ($0["video_id"] as? String) ?? "" }, session: session)
+            try await GH.postDebugLog(session: session)
             lastStatus = "batch uploaded: \(results.count) results"
         } catch {
             lastStatus = "batch failed: \(error)"
