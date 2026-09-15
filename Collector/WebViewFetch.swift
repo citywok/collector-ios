@@ -1,14 +1,13 @@
 import Foundation
 import WebKit
 
-/// Browser-context caption resolver: loads the REAL YouTube watch page in a
-/// hidden WKWebView — a genuine player runtime, so YouTube mints real PO
-/// tokens for it, per its own 2024-25 anti-scraping regime. Extraction runs
-/// in the page's own JS (same origin, same cookies, sanctioned client), and
-/// results come back over the webkit.messageHandlers channel.
-final class WebViewFetch: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+/// Browser-context caption resolver for the REAL app runtime.
+/// The WKWebView lives in the app's view hierarchy (WebViewHost); fetches
+/// load the watch page into it and run the extraction in the page's own JS.
+/// A background-queue watchdog guarantees completion even if a page stalls.
+final class WebViewFetch: NSObject, WKScriptMessageHandler {
     static let shared = WebViewFetch()
-    private var webView: WKWebView?
+    private weak var webView: WKWebView?
     private var jobs: [String: (Result<[String], Error>) -> Void] = [:]
 
     struct FetchError: Error, LocalizedError {
@@ -16,47 +15,30 @@ final class WebViewFetch: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         var errorDescription: String? { message }
     }
 
+    /// Called by the SwiftUI host with the live, foreground webview.
+    func attach(_ wv: WKWebView) {
+        self.webView = wv
+    }
+
     func fetch(videoId: String, completion: @escaping (Result<[String], Error>) -> Void) {
         if !Thread.isMainThread {
             DispatchQueue.main.async { self.fetch(videoId: videoId, completion: completion) }
             return
         }
-        // WATCHDOG: completion is guaranteed within 40s — the device crash was
-        // a hang→watchdog-kill when the page JS never messaged home (no
-        // ytInitialPlayerResponse on the mobile page in time). Fail LOUD into
-        // the debug log rather than hang the batch.
-        // WATCHDOG — runs on a GLOBAL queue: independent of the main thread
-        // (the sim repro proved main can be blocked indefinitely by WebKit
-        // construction inside sandboxed contexts; a main-queue asyncAfter
-        // then never fires — which was both the sim failure AND the device
-        // hang→watchdog-kill). Whatever happens in fetch, completion lands.
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 40) { [weak self] in
-            guard let self, let job = self.jobs.removeValue(forKey: videoId) else { return }
-            DebugLog.shared.record(videoId: videoId, transport: "wkwebview",
-                                   httpStatus: 0, playability: "TIMEOUT",
-                                   reason: "no player response within 40s",
-                                   errorText: "watchdog fired (bg-queue)")
-            job(.failure(FetchError(message: "watchdog: no player response in 40s")))
-            DispatchQueue.main.async { self.webView?.stopLoading() }
+        guard let wv = webView, wv.window != nil else {
+            completion(.failure(FetchError(message: "browser host not attached — open the Fetch tab first")))
+            return
         }
-        let cfg = WKWebViewConfiguration()
-        let uc = cfg.userContentController
-        uc.add(self, name: "collector")
-        // Injected at document start: waits for ytInitialPlayerResponse, then
-        // resolves caption tracks in-page and messages home.
-        let bootstrap = """
+        jobs[videoId] = completion
+
+        // Extraction runs inside the page (same-origin, real cookies/PO tokens).
+        let inject = """
         (function(){
-          const V='%(VID)s';
-          const post=(m)=>webkit.messageHandlers.collector.postMessage(Object.assign({videoId:V},m));
+          const post=(m)=>webkit.messageHandlers.collector.postMessage(Object.assign({videoId:'\(videoId)'},m));
           const tryRead=(tries)=>{
-            const pr=document.getElementById('movie_player') &&
-                     (document.querySelector('ytd-watch-flexy')||{}).playerResponse;
-            // Modern pages store the response on the player element/data:
             let resp=null;
             try { resp = window.ytInitialPlayerResponse; } catch(e){}
-            if (!resp && document.querySelector('#movie_player')) {
-              try { resp = document.getElementById('movie_player').getPlayerResponse(); } catch(e){}
-            }
+            if (!resp) { try { resp = document.getElementById('movie_player').getPlayerResponse(); } catch(e){} }
             if (resp) {
               const ps = resp.playabilityStatus || {};
               const tracks = ((resp.captions||{}).playerCaptionsTracklistRenderer||{}).captionTracks||[];
@@ -65,6 +47,7 @@ final class WebViewFetch: NSObject, WKScriptMessageHandler, WKNavigationDelegate
                 const pool = en.length? en: tracks;
                 const manual = pool.filter(t=>t.kind!=='asr');
                 const track = (manual[0]||pool[0]);
+                post({playability: ps.status||'', tracks: tracks.length});
                 fetch(track.baseUrl + '&fmt=json3', {credentials:'include'})
                   .then(r=>r.text())
                   .then(t=>{
@@ -77,34 +60,40 @@ final class WebViewFetch: NSObject, WKScriptMessageHandler, WKNavigationDelegate
                       }
                     } catch(err){ post({error:'track parse: '+err}); return; }
                     post({lines: lines});
-                  })
-                  .catch(e=>post({error:'track fetch: '+e}));
-              } else {
-                post({playability: ps.status||'', reason: ps.reason||'', tracks: 0});
-              }
+                  }).catch(e=>post({error:'track fetch: '+e}));
+              } else if (tries > 0) { setTimeout(()=>tryRead(tries-1), 2000); }
+              else { post({playability: ps.status||'', reason: ps.reason||'', tracks: 0, error: 'no caption tracks'}); }
             } else if (tries > 0) {
-              setTimeout(()=>tryRead(tries-1), 1500);
-            } else {
-              post({error: 'no playerResponse found on page'});
-            }
+              setTimeout(()=>tryRead(tries-1), 2000);
+            } else { post({error: 'no playerResponse on page after 10 probes'}); }
           };
           tryRead(10);
         })();
-        """.replacingOccurrences(of: "%(VID)s", with: videoId)
-        let us = WKUserScript(source: bootstrap, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
-        uc.addUserScript(us)
-        let wv = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), configuration: cfg)
-        wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
-        wv.isHidden = true
-        wv.navigationDelegate = self
-        self.webView = wv
-        jobs[videoId] = completion
+        """
+        wv.configuration.userContentController.removeAllUserScripts()
+        wv.configuration.userContentController.addUserScript(
+            WKUserScript(source: inject, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+
+        // Background-queue watchdog: 60s cap per video, immune to page stalls.
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 60) { [weak self] in
+            guard let self, let job = self.jobs.removeValue(forKey: videoId) else { return }
+            DebugLog.shared.record(videoId: videoId, transport: "wkwebview-app",
+                                   httpStatus: 0, playability: "TIMEOUT",
+                                   reason: "page never produced captions in 60s",
+                                   errorText: "watchdog fired")
+            DispatchQueue.main.async {
+                self.webView?.stopLoading()
+                job(.failure(FetchError(message: "watchdog: no captions in 60s")))
+            }
+        }
+
+        DebugLog.shared.record(videoId: videoId, transport: "wkwebview-app",
+                               httpStatus: 0, playability: "loading",
+                               reason: "driving app-owned browser")
         wv.load(URLRequest(url: URL(string: "https://www.youtube.com/watch?v=\(videoId)")!))
-        DebugLog.shared.record(videoId: videoId, transport: "wkwebview", httpStatus: 0,
-                               playability: "loading", reason: "page load started")
     }
 
-    // MARK: message from page JS
+    // MARK: page → app messages
 
     func userContentController(_ userContentController: WKUserContentController,
                                didReceive message: WKScriptMessage) {
@@ -113,25 +102,20 @@ final class WebViewFetch: NSObject, WKScriptMessageHandler, WKNavigationDelegate
               let videoId = body["videoId"] as? String else { return }
         let lines = (body["lines"] as? [String]) ?? []
         if !lines.isEmpty {
-            DebugLog.shared.record(videoId: videoId, transport: "wkwebview",
-                                   httpStatus: 200, playability: "OK",
-                                   trackCount: lines.count)
+            DebugLog.shared.record(videoId: videoId, transport: "wkwebview-app",
+                                   httpStatus: 200, playability: "OK", trackCount: lines.count)
             jobs[videoId]?(.success(lines))
             jobs.removeValue(forKey: videoId)
             return
         }
-        let err = (body["error"] as? String) ?? "unknown"
-        DebugLog.shared.record(videoId: videoId, transport: "wkwebview",
-                               httpStatus: -1, playability: (body["playability"] as? String) ?? "",
-                               reason: (body["reason"] as? String) ?? "", errorText: err)
+        let err = (body["error"] as? String) ?? "no lines"
+        DebugLog.shared.record(videoId: videoId, transport: "wkwebview-app",
+                               httpStatus: (body["http"] as? Int) ?? -1,
+                               playability: (body["playability"] as? String) ?? "",
+                               reason: (body["reason"] as? String) ?? "",
+                               trackCount: (body["tracks"] as? Int) ?? 0,
+                               errorText: err)
         jobs[videoId]?(.failure(FetchError(message: err)))
         jobs.removeValue(forKey: videoId)
-    }
-
-    // MARK: navigation failures (network-level)
-
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        DebugLog.shared.record(videoId: "nav", transport: "wkwebview",
-                               httpStatus: -1, errorText: error.localizedDescription)
     }
 }

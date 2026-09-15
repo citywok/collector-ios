@@ -2,61 +2,100 @@ import SwiftUI
 
 struct CollectorView: View {
     @StateObject private var engine: CollectorEngine
-    @State private var auto = false
-    @State private var timer: Timer?
     @State private var pat: String = ""
     @State private var repo: String = "citywok/collector-data"
 
     init() { _engine = StateObject(wrappedValue: CollectorEngine()) }
 
     var body: some View {
-        NavigationStack {
+        TabView {
+            FetchTab(engine: engine)
+                .tabItem { Label("Fetch", systemImage: "globe") }
+            BrowserTab()
+                .tabItem { Label("Browser", systemImage: "safari") }
+            SetupTab(engine: engine, pat: $pat, repo: $repo)
+                .tabItem { Label("Setup", systemImage: "gear") }
+        }
+    }
+}
+
+// MARK: - Fetch tab (drive the app-owned browser)
+
+struct FetchTab: View {
+    @ObservedObject var engine: CollectorEngine
+    @State private var activity: String = "browser host initializing"
+
+    var body: some View {
+        VStack(spacing: 0) {
+            WebViewHost(activity: $activity)
+                .frame(height: 220)
+                .cornerRadius(10)
+                .padding(.horizontal)
             List {
-                Section("Device") {
-                    LabeledContent("ID", value: UIDeviceIdentifiers.stableId().prefix(8))
-                    LabeledContent("Fetched this session", value: "\(engine.fetchedThisSession)")
+                Section("Status") {
+                    LabeledContent("Session fetches", value: "\(engine.fetchedThisSession)")
+                    LabeledContent("Browser", value: activity)
+                    Text(engine.lastStatus).font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Collection") {
                     Button("Fetch next batch now") {
                         Task { await engine.runBatch() }
                     }
-                    Toggle("Auto (while app open)", isOn: $auto)
-                    if auto { LabeledContent("Pacing", value: "8–15 min randomized") }
-                }
-                Section("GitHub transport (one-time setup)") {
-                    SecureField("Fine-grained PAT (contents R/W on collector-data)", text: $pat)
-                    Button("Save token") {
-                        UserDefaults.standard.set(pat, forKey: "crr_pat")
-                        engine.lastStatus = "token saved (\(pat.count) chars)"
-                        pat = ""
-                    }
-                    .disabled(pat.count < 20)
-                    TextField("Repo (owner/name)", text: $repo)
-                    Button("Save repo") {
-                        UserDefaults.standard.set(repo, forKey: "crr_repo")
-                        engine.lastStatus = "repo saved: \(repo)"
-                    }
-                    .disabled(!repo.contains("/"))
-                }
-                Section("Status") {
-                    Button("Send debug bundle now") {
-                        Task { try? await GH.postDebugLog(session: URLSession(configuration: .default)) ; engine.lastStatus = "debug bundle sent: \(DebugLog.shared.attempts.count) attempts" }
-                    }
-                    LabeledContent("Attempts logged", value: "\(DebugLog.shared.attempts.count)")
-                    Text(engine.lastStatus).font(.footnote).foregroundStyle(.secondary)
-                    Text("Requests leave from this device's current network — no server proxies, no credentials on device beyond short-lived S3 PUT slots.")
+                    Text("Keep this tab open while fetching — the app's own browser loads each video and harvests captions. Works from any IP; 8–15 min pacing between videos.")
                         .font(.caption2).foregroundStyle(.tertiary)
                 }
             }
-            .navigationTitle("Speech Collector")
-            .onChange(of: auto) { on in
-                timer?.invalidate()
-                if on {
-                    timer = Timer.scheduledTimer(withTimeInterval: 10 * 60, repeats: true) { _ in
-                        Task { await engine.runBatch() }
-                    }
-                    Task { await engine.runBatch() }
+        }
+    }
+}
+
+// MARK: - Browser tab (visible YouTube; same webview session)
+
+struct BrowserTab: View {
+    var body: some View {
+        VStack {
+            Text("Optional: keep the video visible — harvesting runs in the Fetch tab's browser either way.")
+                .font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
+            WebViewHost(activity: .constant("visible browser"))
+        }
+    }
+}
+
+// MARK: - Setup tab (token/repo/device)
+
+struct SetupTab: View {
+    @ObservedObject var engine: CollectorEngine
+    @Binding var pat: String
+    @Binding var repo: String
+
+    var body: some View {
+        Form {
+            Section("GitHub transport") {
+                SecureField("Fine-grained PAT (contents R/W on collector-data)", text: $pat)
+                Button("Save token") {
+                    UserDefaults.standard.set(pat, forKey: "crr_pat")
+                    engine.lastStatus = "token saved (\(pat.count) chars)"
+                    pat = ""
                 }
+                .disabled(pat.count < 20)
+                TextField("Repo (owner/name)", text: $repo)
+                Button("Save repo") {
+                    UserDefaults.standard.set(repo, forKey: "crr_repo")
+                    engine.lastStatus = "repo saved: \(repo)"
+                }
+                .disabled(!repo.contains("/"))
+            }
+            Section("Diagnostics") {
+                Button("Send debug bundle now") {
+                    Task {
+                        try? await GH.postDebugLog(session: URLSession(configuration: .default))
+                        engine.lastStatus = "debug bundle sent: \(DebugLog.shared.attempts.count) attempts"
+                    }
+                }
+                LabeledContent("Attempts logged", value: "\(DebugLog.shared.attempts.count)")
+            }
+            Section("Device") {
+                LabeledContent("ID", value: String(UIDeviceIdentifiers.stableId().prefix(8)))
             }
         }
     }
