@@ -155,15 +155,34 @@ PYEOF
     -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
   echo "==> Exporting App Store IPA"
-  cat > "$EXPORT_PLIST" <<PLIST
+  if [[ -n "${PROVISIONING_PROFILE_SPECIFIER_OVERRIDE:-}" ]]; then
+    # Manual export: profile map + distribution cert pins (headless, no
+    # Apple-ID session — CityDoku OTA recipe).
+    cat > "$EXPORT_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>method</key><string>app-store-connect</string>
-  <key>teamID</key><string>${TEAM_ID:-9XBN64MC88}</string>
+  <key>teamID</key><string>${TEAM_ID}</string>
+  <key>signingStyle</key><string>manual</string>
+  <key>provisioningProfiles</key><dict>
+    <key>${BUNDLE_ID}</key><string>${PROVISIONING_PROFILE_SPECIFIER_OVERRIDE}</string>
+  </dict>
+  <key>signingCertificate</key><string>${CODE_SIGN_IDENTITY_OVERRIDE:-Apple Distribution: Andrew Parisio (${TEAM_ID})}</string>
   <key>uploadSymbols</key><true/>
 </dict></plist>
 PLIST
+  else
+    cat > "$EXPORT_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>method</key><string>app-store-connect</string>
+  <key>teamID</key><string>${TEAM_ID}</string>
+  <key>uploadSymbols</key><true/>
+</dict></plist>
+PLIST
+  fi
   xcodebuild -exportArchive \
     -archivePath "$ARCHIVE_PATH" -exportPath "$EXPORT_DIR" \
     -exportOptionsPlist "$EXPORT_PLIST" -allowProvisioningUpdates \
