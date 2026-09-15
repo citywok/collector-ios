@@ -24,3 +24,6 @@ actions:
     '' '
   ci: bash build.sh test
   smoke: env CRR_LIVE_SMOKE=1 bash build.sh smoke
+  crashrepro: bash -c "xcodegen generate && xcodebuild test -scheme Collector -destination
+    platform=iOS\ Simulator,name=iPhone\ 17,OS=latest -only-testing:CollectorTests/CrashReproTests
+    2>&1 | tail -40"
