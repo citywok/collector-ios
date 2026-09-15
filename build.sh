@@ -24,9 +24,12 @@ for arg in "$@"; do
 done
 
 # Secrets (provided by the Mac builder env; see memory: golf-build keychain)
-ASC_KEY_ID="${ASC_KEY_ID:-}"
-ASC_ISSUER_ID="${ASC_ISSUER_ID:-}"
-ASC_AUTH_KEY_PATH="${ASC_AUTH_KEY_PATH:-}"
+# Defaults mirror the proven CityDoku values; ASC key file lives at
+# $HOME/.appstoreconnect/private_keys/ on the builder (same account/key).
+ASC_KEY_ID="${ASC_KEY_ID:-MA894X726H}"
+ASC_ISSUER_ID="${ASC_ISSUER_ID:-69a6de98-0f77-47e3-e053-5b8c7c11a4d1}"
+ASC_AUTH_KEY_PATH="${ASC_AUTH_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8}"
+TEAM_ID="${TEAM_ID:-9XBN64MC88}"
 
 if [[ "$GENERATE" == 1 ]]; then
   which xcodegen >/dev/null || brew install xcodegen
