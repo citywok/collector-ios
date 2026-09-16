@@ -187,9 +187,17 @@ final class CollectorEngine: ObservableObject {
                 }
             }
             try await GH.postResults(results: results, session: session)
-            try await GH.removeConsumed(ids: results.map { ($0["video_id"] as? String) ?? "" }, session: session)
+            // Consume ONLY true successes — a miss (no captions / track error)
+            // must stay queued for retry. Consuming misses is how the queue
+            // drained while reporting "no captions" every time.
+            let successes = results.filter {
+                ($0["status"] as? String) == "ok"
+                    && (($0["lines"] as? [String])?.isEmpty == false)
+            }
+            try await GH.removeConsumed(ids: successes.map { ($0["video_id"] as? String) ?? "" },
+                                        session: session)
             try await GH.postDebugLog(session: session)
-            lastStatus = "batch uploaded: \(results.count) results"
+            lastStatus = "batch uploaded: \(successes.count) ok / \(results.count) tried"
         } catch {
             results.append(["batch_error": "\(error)", "partial": true])
             try? await GH.postResults(results: results, session: session)
