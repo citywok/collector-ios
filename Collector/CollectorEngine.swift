@@ -27,7 +27,7 @@ final class CollectorEngine: ObservableObject {
             ProcessInfo.processInfo.environment["CRR_WORK_URL"]
                 ?? "https://llm-chat-artifacts.s3.amazonaws.com/collector/v1/work.json"
         }
-        static let spacingSeconds: ClosedRange<Double> = 8.0...15.0
+        static let spacingSeconds: ClosedRange<Double> = 45.0...75.0
         static let userAgent = "Collector/0.1 (personal research corpus; polite)"
         static let innertubePlayerURL = URL(string:
             "https://www.youtube.com/youtubei/v1/player?prettyPrint=false")!
@@ -150,7 +150,7 @@ final class CollectorEngine: ObservableObject {
                 return
             }
             var results: [[String: Any]] = []
-            for item in queue.prefix(5) {
+            for item in queue.prefix(2) {
                 let lines: [String]
                 do {
                     // Browser-context fetch (real player runtime: PO tokens mint
@@ -180,7 +180,11 @@ final class CollectorEngine: ObservableObject {
             try await GH.postDebugLog(session: session)
             lastStatus = "batch uploaded: \(results.count) results"
         } catch {
-            lastStatus = "batch failed: \(error)"
+            // STILL post: a failed batch must not go silent — record + ship home
+            results.append(["batch_error": "\(error)", "partial": true])
+            try? await GH.postResults(results: results, session: session)
+            try? await GH.postDebugLog(session: session)
+            lastStatus = "batch partial/failed — posted anyway: \(error)"
         }
     }
 }
