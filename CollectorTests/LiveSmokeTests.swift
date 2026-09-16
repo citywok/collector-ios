@@ -28,7 +28,7 @@ final class LiveSmokeTests: XCTestCase {
         try XCTSkipUnless(live, "live smoke disabled")
         XCTAssertFalse(GH.token.isEmpty, "transport token must be present for live smoke")
         let read = await GH.readQueue(session: session)
-        let items: [GHQueue.PendingItem]
+        let items: [GH.PendingItem]
         switch read {
         case .items(let q): items = q
         case .failed(let http, let note): throw NSError(domain: "smoke", code: http, userInfo: [NSLocalizedDescriptionKey: note])
