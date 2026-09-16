@@ -19,6 +19,10 @@ final class WebViewFetch: NSObject, WKScriptMessageHandler {
     func attach(_ wv: WKWebView) {
         self.webView = wv
     }
+    /// Test-diagnostics use: drop the attached host so fetch() fails fast.
+    func detach() {
+        self.webView = nil
+    }
 
     func fetch(videoId: String, completion: @escaping (Result<[String], Error>) -> Void) {
         if !Thread.isMainThread {

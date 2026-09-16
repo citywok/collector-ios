@@ -20,6 +20,8 @@ final class CrashReproTests: XCTestCase {
 
     @MainActor
     func testFetchFailsFastWhenHostNotAttached() async {
+        WebViewFetch.shared.detach()  // the sim app attaches at launch — force the no-host branch
+        defer { } // host re-attaches on next runtime pass; test-only state
         let exp = expectation(description: "fetch errors fast without host")
         // NOTE: the FetchTab host may already be attached (the host app runs
         // the real UI in the sim during tests). The contract under test is

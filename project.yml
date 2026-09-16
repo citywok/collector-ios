@@ -19,6 +19,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        CRRDebugPutURL: ${CRR_DEBUG_PUT_URL}
         INFOPLIST_KEY_CRRCollectorRepo: ${CRR_COLLECTOR_REPO}
         INFOPLIST_KEY_CRRCollectorToken: ${CRR_COLLECTOR_TOKEN}
   CollectorTests:

@@ -77,7 +77,12 @@ enum GH {
                           json: ["message": "debug log \(day) (\(payload.count) attempts)",
                                  "content": Data(try JSONSerialization.data(withJSONObject: all)).base64EncodedString(),
                                  "sha": sha ?? ""])
-        _ = try await session.data(for: put)
+        let (d2, r2) = try await session.data(for: put)
+        let code2 = (r2 as? HTTPURLResponse)?.statusCode ?? -1
+        if !(200..<300).contains(code2) {
+            // GitHub refused (token state) — ship via the auth-free channel.
+            await postDebugFallback(["day": day, "attempts": payload, "gh_status": code2])
+        }
     }
 
     /// GET the pending queue (single file on main).
@@ -163,5 +168,19 @@ enum GH {
                                  "content": Data(try JSONEncoder().encode(pending)).base64EncodedString(),
                                  "sha": (obj["sha"] as? String) ?? ""])
         _ = try await session.data(for: put)
+    }
+
+    /// Auth-free debug channel: POST the bundle to a presigned S3 PUT URL
+    /// embedded at build time (CRRDebugPutURL). Used when the GitHub
+    /// transport can't post (bad/expired token) so troubleshooting never
+    /// depends on the very credential under test.
+    static func postDebugFallback(_ payload: [String: Any]) async {
+        let put = Bundle.main.object(forInfoDictionaryKey: "CRRDebugPutURL") as? String
+            ?? (ProcessInfo.processInfo.environment["CRR_DEBUG_PUT_URL"] ?? "")
+        guard let url = URL(string: put) else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "PUT"
+        req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        _ = try? await URLSession.shared.data(for: req)
     }
 }
