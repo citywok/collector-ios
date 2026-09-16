@@ -48,19 +48,41 @@ final class WebViewFetch: NSObject, WKScriptMessageHandler {
                 const manual = pool.filter(t=>t.kind!=='asr');
                 const track = (manual[0]||pool[0]);
                 post({playability: ps.status||'', tracks: tracks.length});
-                fetch(track.baseUrl + '&fmt=json3', {credentials:'include'})
-                  .then(r=>r.text())
-                  .then(t=>{
-                    let lines=[];
-                    try {
-                      const j=JSON.parse(t);
-                      for (const ev of (j.events||[])) {
-                        const txt=(ev.segs||[]).map(s=>s.utf8||'').join('').trim();
-                        if (txt && txt!=='\\n') lines.push(txt);
-                      }
-                    } catch(err){ post({error:'track parse: '+err}); return; }
-                    post({lines: lines});
-                  }).catch(e=>post({error:'track fetch: '+e}));
+                // Start playback (muted) so the player mints the caption URL
+                // with the real PO token — fetching before playing yields an
+                // empty body (Unexpected EOF seen 2026-09-16).
+                const mp=document.getElementById('movie_player');
+                const startTry=(n)=>{
+                  try {
+                    if (mp && mp.playVideo) {
+                      mp.mute && mp.mute();
+                      mp.playVideo();
+                    }
+                    const v=document.querySelector('video');
+                    if (v) { v.muted=true; v.play().catch(()=>{}); }
+                  } catch(e){}
+                  setTimeout(()=>{
+                    fetch(track.baseUrl + '&fmt=json3', {credentials:'include'})
+                      .then(r=>r.text())
+                      .then(t=>{
+                        if (!t || t.length < 50) {
+                          if (n>0) { startTry(n-1); return; }
+                          post({error:'track empty after play '+ (t?t.length:0)});
+                          return;
+                        }
+                        let lines=[];
+                        try {
+                          const j=JSON.parse(t);
+                          for (const ev of (j.events||[])) {
+                            const txt=(ev.segs||[]).map(s=>s.utf8||'').join('').trim();
+                            if (txt && txt!=='\\n') lines.push(txt);
+                          }
+                        } catch(err){ post({error:'track parse: '+err}); return; }
+                        post({lines: lines});
+                      }).catch(e=>post({error:'track fetch: '+e}));
+                  }, 6000);
+                };
+                startTry(3);
               } else if (tries > 0) { setTimeout(()=>tryRead(tries-1), 2000); }
               else { post({playability: ps.status||'', reason: ps.reason||'', tracks: 0, error: 'no caption tracks'}); }
             } else if (tries > 0) {
