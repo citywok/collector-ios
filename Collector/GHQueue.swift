@@ -82,17 +82,37 @@ enum GH {
 
     /// GET the pending queue (single file on main).
     static func fetchPending(session: URLSession) async throws -> [PendingItem] {
-        let req = request(path: "/repos/\(repo)/contents/queue/pending.json", method: "GET")
-        let (data, resp) = try await session.data(for: req)
-        guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return [] }
-        guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let content = obj["content"] as? String,
-              let decoded = Data(base64Encoded: content.replacingOccurrences(of: "\n", with: "")) else {
-            return []
+        do {
+            let req = request(path: "/repos/\(repo)/contents/queue/pending.json", method: "GET")
+            let (data, resp) = try await session.data(for: req)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+            if code != 200 {
+                let body = String(data: data.prefix(140), encoding: .utf8) ?? ""
+                DebugLog.shared.record(videoId: "queue", transport: "gh-get",
+                                       httpStatus: code,
+                                       playability: "QUEUE_READ",
+                                       reason: "pending.json read failed",
+                                       errorText: "HTTP \(code) \(body))")
+                return []
+            }
+            guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let content = obj["content"] as? String,
+                  let decoded = Data(base64Encoded: content.replacingOccurrences(of: "\n", with: "")) else {
+                DebugLog.shared.record(videoId: "queue", transport: "gh-get",
+                                       httpStatus: code, playability: "QUEUE_READ",
+                                       reason: "decode failed",
+                                       errorText: "contents payload unmapped")
+                return []
+            }
+            struct Pending: Codable { let items: [PendingItem] }
+            let pending = try JSONDecoder().decode(Pending.self, from: decoded)
+            return pending.items
+        } catch {
+            DebugLog.shared.record(videoId: "queue", transport: "gh-get",
+                                   httpStatus: -1, playability: "QUEUE_READ",
+                                   reason: "exception", errorText: "\(error)")
+            throw error
         }
-        struct Pending: Codable { let items: [PendingItem] }
-        let pending = try JSONDecoder().decode(Pending.self, from: decoded)
-        return pending.items
     }
 
     /// POST captured results: appends to results/YYYY-MM-DD.json (full-file

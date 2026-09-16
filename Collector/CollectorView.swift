@@ -85,6 +85,11 @@ struct SetupTab: View {
                 }
                 .disabled(!repo.contains("/"))
             }
+            Section("Token state") {
+                let has = (UserDefaults.standard.string(forKey: "crr_pat") ?? "").isEmpty == false
+                LabeledContent("Token saved", value: has ? "yes (\(UserDefaults.standard.string(forKey: "crr_pat")!.count) chars)" : "NO — paste above and Save")
+                LabeledContent("Repo saved", value: UserDefaults.standard.string(forKey: "crr_repo") ?? "(default)")
+            }
             Section("Diagnostics") {
                 Button("Send debug bundle now") {
                     Task {
