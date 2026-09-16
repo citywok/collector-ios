@@ -143,13 +143,13 @@ final class CollectorEngine: ObservableObject {
     // MARK: - One full batch (GitHub transport; WKWebView resolver)
 
     func runBatch() async {
+        var results: [[String: Any]] = []
         do {
             let queue = try await GH.fetchPending(session: session)
             guard !queue.isEmpty else {
                 lastStatus = "queue empty — workstation has not published new work"
                 return
             }
-            var results: [[String: Any]] = []
             for item in queue.prefix(2) {
                 let lines: [String]
                 do {
