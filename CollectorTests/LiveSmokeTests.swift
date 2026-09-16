@@ -27,7 +27,12 @@ final class LiveSmokeTests: XCTestCase {
     func testLiveGitHubQueueGet() async throws {
         try XCTSkipUnless(live, "live smoke disabled")
         XCTAssertFalse(GH.token.isEmpty, "transport token must be present for live smoke")
-        let items = try await GH.fetchPending(session: session)
+        let read = await GH.readQueue(session: session)
+        let items: [GHQueue.PendingItem]
+        switch read {
+        case .items(let q): items = q
+        case .failed(let http, let note): throw NSError(domain: "smoke", code: http, userInfo: [NSLocalizedDescriptionKey: note])
+        }
         XCTAssertNotNil(items, "GET must resolve (200 with items, or 404 -> [])")
     }
 

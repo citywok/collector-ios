@@ -145,17 +145,23 @@ final class CollectorEngine: ObservableObject {
     func runBatch() async {
         var results: [[String: Any]] = []
         do {
-            let queue = try await GH.fetchPending(session: session)
-            guard !queue.isEmpty else {
-                lastStatus = "queue empty — workstation has not published new work"
+            switch await GH.readQueue(session: session) {
+            case .failed(let http, let note):
+                lastStatus = "queue read FAILED — HTTP \(http): \(note) (auto-reporting)"
+                try? await GH.postDebugLog(session: session)  // S3 fallback fires if GitHub refuses
                 return
-            }
-            for item in queue.prefix(2) {
-                let lines: [String]
-                do {
+            case .items(let queue):
+                guard !queue.isEmpty else {
+                    lastStatus = "queue has 0 items (read OK) — workstation refills; nothing to do"
+                    try? await GH.postDebugLog(session: session)
+                    return
+                }
+                lastStatus = "queue has \(queue.count) items — fetching first 2 now"
+                for item in queue.prefix(2) {
+                    do {
                     // Browser-context fetch (real player runtime: PO tokens mint
                     // for real; the raw-innertube path died to YouTube's wall).
-                    lines = try await withCheckedThrowingContinuation { cont in
+                    let lines = try await withCheckedThrowingContinuation { cont in
                         WebViewFetch.shared.fetch(videoId: item.videoId) { result in
                             cont.resume(with: result)
                         }
@@ -176,8 +182,9 @@ final class CollectorEngine: ObservableObject {
                     try? await GH.postResults(results: [results.last!], session: session)  // miss ALSO posts immediately
                     try? await GH.postDebugLog(session: session)
                 }
-                let pause = Double.random(in: spacingRange.lowerBound...spacingRange.upperBound)
-                try await Task.sleep(nanoseconds: UInt64(pause * 1_000_000_000))
+                    let pause = Double.random(in: spacingRange.lowerBound...spacingRange.upperBound)
+                    try await Task.sleep(nanoseconds: UInt64(pause * 1_000_000_000))
+                }
             }
             try await GH.postResults(results: results, session: session)
             try await GH.removeConsumed(ids: results.map { ($0["video_id"] as? String) ?? "" }, session: session)

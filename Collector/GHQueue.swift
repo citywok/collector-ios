@@ -85,38 +85,47 @@ enum GH {
         }
     }
 
-    /// GET the pending queue (single file on main).
-    static func fetchPending(session: URLSession) async throws -> [PendingItem] {
+    /// Named queue-read outcome. A transport failure must never masquerade as
+    /// "queue empty": the caller renders items/failed distinctly, and failed
+    /// also auto-reports via the debug channel (S3 fallback included).
+    enum QueueRead: Sendable {
+        case items([PendingItem])
+        case failed(http: Int, note: String)
+    }
+
+    /// GET the pending queue (single file on main). Never throws.
+    static func readQueue(session: URLSession) async -> QueueRead {
+        var code = 200
         do {
             let req = request(path: "/repos/\(repo)/contents/queue/pending.json", method: "GET")
             let (data, resp) = try await session.data(for: req)
-            let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+            code = (resp as? HTTPURLResponse)?.statusCode ?? -1
             if code != 200 {
-                let body = String(data: data.prefix(140), encoding: .utf8) ?? ""
+                let body = String(data: data.prefix(160), encoding: .utf8) ?? ""
                 DebugLog.shared.record(videoId: "queue", transport: "gh-get",
                                        httpStatus: code,
                                        playability: "QUEUE_READ",
                                        reason: "pending.json read failed",
-                                       errorText: "HTTP \(code) \(body))")
-                return []
+                                       errorText: "HTTP \(code) \(body)")
+                return .failed(http: code, note: "HTTP \(code) reading pending.json")
             }
             guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let content = obj["content"] as? String,
                   let decoded = Data(base64Encoded: content.replacingOccurrences(of: "\n", with: "")) else {
                 DebugLog.shared.record(videoId: "queue", transport: "gh-get",
                                        httpStatus: code, playability: "QUEUE_READ",
-                                       reason: "decode failed",
+                                       reason: "contents decode failed",
                                        errorText: "contents payload unmapped")
-                return []
+                return .failed(http: code, note: "contents payload unmapped (decode)")
             }
             struct Pending: Codable { let items: [PendingItem] }
             let pending = try JSONDecoder().decode(Pending.self, from: decoded)
-            return pending.items
+            return .items(pending.items)
         } catch {
             DebugLog.shared.record(videoId: "queue", transport: "gh-get",
-                                   httpStatus: -1, playability: "QUEUE_READ",
-                                   reason: "exception", errorText: "\(error)")
-            throw error
+                                   httpStatus: code, playability: "QUEUE_READ",
+                                   reason: "read/decode exception", errorText: "\(error)")
+            return .failed(http: code, note: "read/decode: \(error.localizedDescription)")
         }
     }
 

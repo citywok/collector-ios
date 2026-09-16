@@ -91,6 +91,15 @@ struct SetupTab: View {
                 LabeledContent("Repo saved", value: UserDefaults.standard.string(forKey: "crr_repo") ?? "(default)")
             }
             Section("Diagnostics") {
+                Button("Test connection (one-tap verdict)") {
+                    Task { @MainActor in
+                        engine.lastStatus = "testing connection…"
+                        switch await GH.readQueue(session: URLSession(configuration: .default)) {
+                        case .items(let q): engine.lastStatus = "connection OK — queue has \(q.count) items"
+                        case .failed(let h, let n): engine.lastStatus = "connection FAILED — HTTP \(h): \(n)"
+                        }
+                    }
+                }
                 Button("Send debug bundle now") {
                     Task {
                         try? await GH.postDebugLog(session: URLSession(configuration: .default))
