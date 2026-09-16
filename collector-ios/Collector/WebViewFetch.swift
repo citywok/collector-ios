@@ -52,19 +52,37 @@ final class WebViewFetch: NSObject, WKScriptMessageHandler {
                 // with the real PO token — fetching before playing yields an
                 // empty body (Unexpected EOF seen 2026-09-16).
                 const mp=document.getElementById('movie_player');
+                // Play FIRST, then RE-READ the player's captionTracks: the
+                // minted (pot-bearing) URL only exists in the player's
+                // UPDATED response after playback starts — the pre-play
+                // URL yields an empty json3 (the 20-attempt phone bundle
+                // proved it 2026-09-16).
                 const startTry=(n)=>{
                   try {
-                    if (mp && mp.playVideo) {
-                      mp.mute && mp.mute();
-                      mp.playVideo();
-                    }
+                    if (mp && mp.playVideo) { mp.mute && mp.mute(); mp.playVideo(); }
                     const v=document.querySelector('video');
                     if (v) { v.muted=true; v.play().catch(()=>{}); }
                   } catch(e){}
                   setTimeout(()=>{
-                    fetch(track.baseUrl + '&fmt=json3', {credentials:'include'})
+                    let mintedBase=null;
+                    try {
+                      const fr=mp && mp.getPlayerResponse && mp.getPlayerResponse();
+                      const frTracks=((fr.captions||{}).playerCaptionsTracklistRenderer||{}).captionTracks||[];
+                      if (frTracks.length) {
+                        const en2=frTracks.filter(t=>(t.languageCode||'').startsWith('en'));
+                        const pool2=en2.length? en2: frTracks;
+                        const man2=pool2.filter(t=>t.kind!=='asr');
+                        const t2=(man2[0]||pool2[0]);
+                        mintedBase=t2.baseUrl;
+                      }
+                    } catch(e){}
+                    const useBase = mintedBase || track.baseUrl;
+                    if (mintedBase) post({playability:'MINTED', reason:'player re-emitted track post-play', tracks:1});
+                    else post({playability:'NO-MINT', reason:'player kept same track URL', tracks:1});
+                    fetch(useBase + '&fmt=json3', {credentials:'include'})
                       .then(r=>r.text())
                       .then(t=>{
+                        post({http:0, reason:'fetch len='+t.length+' head='+(t||'').slice(0,90)});
                         if (!t || t.length < 50) {
                           if (n>0) { startTry(n-1); return; }
                           post({error:'track empty after play '+ (t?t.length:0)});
