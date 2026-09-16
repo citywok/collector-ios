@@ -179,7 +179,6 @@ final class CollectorEngine: ObservableObject {
                 let pause = Double.random(in: spacingRange.lowerBound...spacingRange.upperBound)
                 try await Task.sleep(nanoseconds: UInt64(pause * 1_000_000_000))
             }
-            } // per-item loop end
             try await GH.postResults(results: results, session: session)
             try await GH.removeConsumed(ids: results.map { ($0["video_id"] as? String) ?? "" }, session: session)
             try await GH.postDebugLog(session: session)
@@ -190,7 +189,6 @@ final class CollectorEngine: ObservableObject {
             try? await GH.postDebugLog(session: session)
             lastStatus = "batch partial/failed — posted anyway: \(error)"
         }
-        // SELF-CLEARING: prime the next debug post for push-even-on-no-pat? no-op. Done.
     }
 }
 
